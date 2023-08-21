@@ -10,7 +10,7 @@ bson = "2.6.1"
 futures = "0.3.28"
 #datetime = "0.5.2"
 mongodb = "2.6.1"
-serde  = { version = "1.0.184", optional = true, features = ["derive"] }
+serde  = { version = "1.0.184", features = ["derive"] }
 serde_json = { version = "1.0.105", features = ["preserve_order"] }
 tokio = { version = "1.32.0", features = ["rt", "rt-multi-thread", "macros"] }
 

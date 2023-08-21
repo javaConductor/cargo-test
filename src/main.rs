@@ -1,115 +1,101 @@
-//use serde::{self, Deserialize, Serialize};
-//#[derive(Clone, Debug, Deserialize, Serialize)]
+use mongodb::{Client, Collection};
+use mongodb::bson::{Document, oid::ObjectId, DateTime, document::ValueAccessResult};
+use tokio;
+use bson::{bson, doc, Bson};
+use serde::{Deserialize, Serialize};
+use futures::stream::StreamExt;
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
 struct LessonElement {
+    #[serde(rename(deserialize = "verseSpec"))]
     verse_spec: String,
-    comments: String,
-    element_type: String,
+    comments: Option<String>,
+    #[serde(rename(deserialize = "elementType"))]
+    element_type: Option<String>,
 }
-//#[derive(Clone, Debug, Deserialize, Serialize)]
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+
 struct Lesson {
     _id: ObjectId,
     title: String,
-    lesson_date: DateTime,
+    #[serde(rename(deserialize = "lessonDate"))]
+    lesson_date: Option<DateTime>,
     teacher: String,
+    #[serde(rename(deserialize = "lessonElements"))]
     lesson_elements: Vec<LessonElement>,
 }
 
-
- use mongodb::bson::{Document, oid::ObjectId};
-use mongodb::bson::DateTime;
-use mongodb::{Client, Collection, Cursor};
-use mongodb::bson::document::ValueAccessResult;
-use tokio;
-
-// don't forget this!
-use tokio::stream;
-use futures::stream::StreamExt;
-
-
 // use mongodb::bson::datetime;
 #[tokio::main]
-async fn main(){
+async fn main() {
     println!("Reading lessons from Mongo DB");
     let client_uri = String::from("mongodb://localhost:27017");
-
     let clien_opt = create_mongo_db(&client_uri).await;
-
     let client = clien_opt.expect("No client returned");
     println!("Got client - calling process()");
-
-   let docs = process(client);
-    // match create_mongo_db(&client_uri).await {
-    //     Some(mongodb_client) => process(mongodb_client.to_owned()),
-    //     None => None,
-    // }
+    let docs = process(client);
     let doc_vector_opt = docs.await;
+    println!("Back from process()");
 
     match doc_vector_opt {
         Some(doc_vector) => {
-            let mut title_vec:Vec<String> = Vec::new();
-            for doc in doc_vector  {
-                let title =  doc.get_str("title").unwrap();
-                println!("doc: {}", title);
+            let mut title_vec: Vec<String> = Vec::new();
+            for lesson in doc_vector {
+                let title = lesson.title;
+                println!("lesson title: {}", title);
                 title_vec.push(title.to_string());
             }
             Some(title_vec)
         }
-        _ => { None}
+        _ => { None }
     };
-
-    //Ok(title_vec)
 }
 
-
-async fn process(mongodb_client: Client) -> Option<Vec<Document>>{
+async fn process(mongodb_client: Client) -> Option<Vec<Lesson>> {
     println!("in process()");
-
 
     let db = mongodb_client.database("lessons");
     println!("in process(): got db: {}", db.name());
 
     // let lesson_collection: mongodb::Collection<Lesson> = db.collection("lessons");\
-    let collection:Collection<Document> = db.collection::<Document>("lessons");
-
-    //let mut cursor:Cursor<Document> =  collection.find(None,None).await.ok()?;
-
+    let collection: Collection<Lesson> = db.collection::<Lesson>("lessons");
     let cursor = match collection.find(None, None).await {
         Ok(cursor) => cursor,
         Err(_) => {
-            let v:Vec<Document> = Vec::new();
+            let v: Vec<Lesson> = Vec::new();
             return Option::from(v);
-        },
+        }
     };
-    let results: Vec<Result<Document, _>> = cursor.collect().await;
-   // let vec = cursor.try_collect().await.unwrap_or_else(|_| vec![]);
 
-    let mut  doc_vec:Vec<Document> = Vec::new();
-    for item in  results {
-        println!("{:?}", item);
-        let doc = item.unwrap();
-        doc_vec.push(doc);
-    }
-    // let lessons_result_vector:Result<Document, _>  =  cursor.deserialize_current() ;
-    // let mut lessons_vector: Vec<Document> = Vec::new();
 
-    // println!("in processs(): {} documents", lessons_result_vector.le);
-    for l in doc_vec.clone() {
-        let lesson_doc: ValueAccessResult<&str> = l.get_str("title");
-        let title = lesson_doc.unwrap_or("No title");
-        println!("Lesson {}", title);
-        //lessons_vector.push(l);
+    // let results: Vec<Result<Document, _>> = cursor.collect().await?.try;
+    // let vec = cursor.try_collect().await.unwrap_or_else(|_| vec![]);
+
+    let results: Vec<Result<Lesson, _>> = cursor.collect().await;
+    // let vec = cursor.try_collect().await.unwrap_or_else(|_| vec![]);
+
+    let mut lesson_vec: Vec<Lesson> = Vec::new();
+    for item in results {
+        println!("{:?}\n", item);
+
+        let lesson = item.unwrap();
+        //let doc_str = doc.to_string();
+        println!("{:?}\n", lesson);
+        lesson_vec.push(lesson);
     }
 
-    //
-    // while let Some(result) =
-    //     cursor.collect().await {
-    //     let lesson = result?;
-    //     lessons.push(lesson);
-    //     println!("Lesson {}", lesson.get_str("title")?);
-    // }
-    Some(doc_vec)
+    for l in lesson_vec.clone() {
+        let lesson_title:  &str = l.title.as_str();
+        println!("Lesson {}", lesson_title);
+    }
+
+    Some(lesson_vec)
 }
-  async fn create_mongo_db(client_uri: &str) -> Option<Client> {
+
+async fn create_mongo_db(client_uri: &str) -> Option<Client> {
     let result = Client::with_uri_str(client_uri);
     result.await.ok()
 }
